@@ -8,6 +8,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -37,84 +38,10 @@ public class WebScrapper {
         client.getOptions().setCssEnabled(false);
         client.getOptions().setJavaScriptEnabled(false);
 
-        // AMAZON.COM
-        for (int i = 1; i <= pages; i++) {
-            try {
-                HtmlPage page = client.getPage(searchUrl_Amazon_com + i);
-                System.out.println(page.getUrl());
-                List<HtmlElement> items = page.getByXPath("//div[@class='sg-col-4-of-12 sg-col-8-of-16 sg-col-16-of-24 sg-col-12-of-20 sg-col-24-of-32 sg-col sg-col-28-of-36 sg-col-20-of-28']");
-                for (HtmlElement item : items) {
-                    HtmlElement name = item.getFirstByXPath(".//span[@class='a-size-medium a-color-base a-text-normal']");
-                    HtmlElement link = item.getFirstByXPath(".//a[@class='a-link-normal a-text-normal']");
 
-                    if (name != null && link != null)
-                        itemList.add(new Item(name.asText(), AMAZON_COM, "https://www.amazon.com" + link.getAttribute("href")));
-                }
-                Thread.sleep(1000);
-
-            } catch (IOException | InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
-
-        // AMAZON.CO.UK
-        for (int i = 1; i <= pages; i++) {
-            try {
-                HtmlPage page = client.getPage(searchUrl_Amazon_co_uk + i);
-                System.out.println(page.getUrl());
-                List<HtmlElement> items = page.getByXPath("//div[@class='sg-col-4-of-12 sg-col-8-of-16 sg-col-16-of-24 sg-col-12-of-20 sg-col-24-of-32 sg-col sg-col-28-of-36 sg-col-20-of-28']");
-                for (HtmlElement item : items) {
-                    HtmlElement name = item.getFirstByXPath(".//span[@class='a-size-medium a-color-base a-text-normal']");
-                    HtmlElement link = item.getFirstByXPath(".//a[@class='a-link-normal a-text-normal']");
-
-                    if (name != null && link != null)
-                        itemList.add(new Item(name.asText(), AMAZON_CO_UK, "https://www.amazon.co.uk" + link.getAttribute("href")));
-                }
-                Thread.sleep(1000);
-
-            } catch (IOException | InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
-
-        // EBAY.COM
-        for (int i = 1; i <= pages; i++) {
-            try {
-                HtmlPage page = client.getPage(searchUrl_Ebay_com + i);
-                System.out.println(page.getUrl());
-                List<HtmlElement> items = page.getByXPath("//div[@class='s-item__info clearfix']");
-                for (HtmlElement item : items) {
-                    DomText name = item.getFirstByXPath(".//h3[@class='s-item__title']/text()");
-                    if (name == null || name.asText().isEmpty())
-                        name = item.getFirstByXPath(".//h3[@class='s-item__title s-item__title--has-tags']/text()");
-                    HtmlElement link = item.getFirstByXPath(".//a[@class='s-item__link']");
-                    if (name != null && link != null) {
-                        HtmlElement details = item.getFirstByXPath(".//div[@class='s-item__details clearfix']");
-                        List<HtmlElement> primaryDetails = details.getByXPath(".//div[@class='s-item__detail s-item__detail--primary']");
-                        char currency = 'd';
-                        float price = 0.0f;
-                        float shippingPrice = 0.0f;
-                        boolean skip = false;
-                        for (int j = 0; j < primaryDetails.size(); j++) {
-                            if (primaryDetails.get(j) != null) {
-                                if (j == 0) {
-                                    currency = primaryDetails.get(j).asText().charAt(0);
-                                    price = getPrice(primaryDetails.get(j).asText());
-                                }
-                                else if (primaryDetails.get(j).asText().contains("shipping"))
-                                    shippingPrice = getPrice(primaryDetails.get(j).asText());
-                                else if (primaryDetails.get(j).asText().contains("bids"))
-                                    skip = true;
-                            }
-                        }
-                        if (!skip)
-                            itemList.add(new Item(name.asText(), EBAY_COM, currency, price, shippingPrice, link.getAttribute("href")));
-                    }
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
+        scrapeAmazon_com(client);
+        scrapeAmazon_co_uk(client);
+        scrapeEbay_com(client);
 
         for (Item item : itemList) {
             if (item.getSite() == AMAZON_COM || item.getSite() == AMAZON_CO_UK) {
@@ -166,24 +93,18 @@ public class WebScrapper {
                     e.printStackTrace();
                 }
             }
-
-            if (item.getSite() == EBAY_COM)
-                continue;
         }
+
+        client.close();
 
         itemList.removeAll(remove);
         remove.clear();
 
-
-        client.close();
-
-        itemList.sort((it1, it2) -> Float.compare(it1.getFullPriceConverted(), it2.getFullPriceConverted()));
+        itemList.sort((item1, item2) -> Float.compare(item1.getFullPriceConverted(), item2.getFullPriceConverted()));
 
         try {
-            PrintWriter pw = new PrintWriter("the-file-name.html", "UTF-8");
+            PrintWriter writer = new PrintWriter("the-file-name.html", StandardCharsets.UTF_8);
             for (Item item : itemList) {
-                //System.out.println(item.getName() + " " + item.getPrice() + " " + item.getShippingPrice() + " " + item.getFullPriceConverted() + " Eur");
-                //System.out.println(item.getUrl());
                 String site = "";
                 switch (item.getSite()) {
                     case AMAZON_COM:
@@ -196,47 +117,118 @@ public class WebScrapper {
                         site = "Ebay.com";
                         break;
                 }
-                String s = site + " <a href=\"" + item.getUrl() + "\">" + item.getName() + "</a>" + " " + item.getFullPriceConverted() + " Eur<br>";
-                pw.println(s);
+                String itemLine = site + " <a href=\"" + item.getUrl() + "\">" + item.getName() + "</a>" + " " + item.getFullPriceConverted() + " Eur<br>";
+                writer.println(itemLine);
             }
-            pw.close();
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-        } catch (UnsupportedEncodingException e) {
+            writer.close();
+        } catch (IOException e) {
             e.printStackTrace();
         }
 
     }
 
-    public void scrapeAmazon_com() {
+    public void scrapeAmazon_com(WebClient client) {
+        // AMAZON.COM
+        for (int i = 1; i <= pages; i++) {
+            try {
+                HtmlPage page = client.getPage(searchUrl_Amazon_com + i);
+                System.out.println(page.getUrl());
+                List<HtmlElement> items = page.getByXPath("//div[@class='sg-col-4-of-12 sg-col-8-of-16 sg-col-16-of-24 sg-col-12-of-20 sg-col-24-of-32 sg-col sg-col-28-of-36 sg-col-20-of-28']");
+                for (HtmlElement item : items) {
+                    HtmlElement name = item.getFirstByXPath(".//span[@class='a-size-medium a-color-base a-text-normal']");
+                    HtmlElement link = item.getFirstByXPath(".//a[@class='a-link-normal a-text-normal']");
 
+                    if (name != null && link != null)
+                        itemList.add(new Item(name.asText(), AMAZON_COM, "https://www.amazon.com" + link.getAttribute("href")));
+                }
+                Thread.sleep(1000);
+
+            } catch (IOException | InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
     }
 
-    public void scrapeAmazon_co_uk() {
+    public void scrapeAmazon_co_uk(WebClient client) {
+        // AMAZON.CO.UK
+        for (int i = 1; i <= pages; i++) {
+            try {
+                HtmlPage page = client.getPage(searchUrl_Amazon_co_uk + i);
+                System.out.println(page.getUrl());
+                List<HtmlElement> items = page.getByXPath("//div[@class='sg-col-4-of-12 sg-col-8-of-16 sg-col-16-of-24 sg-col-12-of-20 sg-col-24-of-32 sg-col sg-col-28-of-36 sg-col-20-of-28']");
+                for (HtmlElement item : items) {
+                    HtmlElement name = item.getFirstByXPath(".//span[@class='a-size-medium a-color-base a-text-normal']");
+                    HtmlElement link = item.getFirstByXPath(".//a[@class='a-link-normal a-text-normal']");
 
+                    if (name != null && link != null)
+                        itemList.add(new Item(name.asText(), AMAZON_CO_UK, "https://www.amazon.co.uk" + link.getAttribute("href")));
+                }
+                Thread.sleep(1000);
+
+            } catch (IOException | InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
     }
 
-    public void scrapeEbay_com() {
-
+    public void scrapeEbay_com(WebClient client) {
+        // EBAY.COM
+        for (int i = 1; i <= pages; i++) {
+            try {
+                HtmlPage page = client.getPage(searchUrl_Ebay_com + i);
+                System.out.println(page.getUrl());
+                List<HtmlElement> items = page.getByXPath("//div[@class='s-item__info clearfix']");
+                for (HtmlElement item : items) {
+                    DomText name = item.getFirstByXPath(".//h3[@class='s-item__title']/text()");
+                    if (name == null || name.asText().isEmpty())
+                        name = item.getFirstByXPath(".//h3[@class='s-item__title s-item__title--has-tags']/text()");
+                    HtmlElement link = item.getFirstByXPath(".//a[@class='s-item__link']");
+                    if (name != null && link != null) {
+                        HtmlElement details = item.getFirstByXPath(".//div[@class='s-item__details clearfix']");
+                        List<HtmlElement> primaryDetails = details.getByXPath(".//div[@class='s-item__detail s-item__detail--primary']");
+                        char currency = 'd';
+                        float price = 0.0f;
+                        float shippingPrice = 0.0f;
+                        boolean skip = false;
+                        for (int j = 0; j < primaryDetails.size(); j++) {
+                            if (primaryDetails.get(j) != null) {
+                                if (j == 0) {
+                                    currency = primaryDetails.get(j).asText().charAt(0);
+                                    price = getPrice(primaryDetails.get(j).asText());
+                                }
+                                else if (primaryDetails.get(j).asText().contains("shipping"))
+                                    shippingPrice = getPrice(primaryDetails.get(j).asText());
+                                else if (primaryDetails.get(j).asText().contains("bids"))
+                                    skip = true;
+                            }
+                        }
+                        if (!skip)
+                            itemList.add(new Item(name.asText(), EBAY_COM, currency, price, shippingPrice, link.getAttribute("href")));
+                    }
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     private float getPrice(String price) {
-        String pr = "";
+        StringBuilder modifiedPrice = new StringBuilder();
         boolean hadDecimal = false;
         int stopAt = 9999;
         for (int i = 0; i < price.length(); i++) {
             if (price.charAt(i) >= '0' && price.charAt(i) <= '9') {
-                pr += price.charAt(i);
+                modifiedPrice.append(price.charAt(i));
             } else if (price.charAt(i) == '.' && !hadDecimal) {
-                pr += price.charAt(i);
+                modifiedPrice.append(price.charAt(i));
                 hadDecimal = true;
                 stopAt = i + 2;
             }
             if (i == stopAt)
                 break;
         }
-        if (pr.isEmpty()) return 0.0f;
-        else return Float.parseFloat(pr);
+        if (modifiedPrice.length() == 0) return 0.0f;
+        else return Float.parseFloat(modifiedPrice.toString());
     }
 
 
