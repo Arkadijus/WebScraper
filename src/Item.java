@@ -2,7 +2,7 @@ import java.text.DecimalFormat;
 
 public class Item {
     private float dollarToEur = 0.91f;
-    private float poundToEur = 1.17f;
+    private float poundToEur = 1.19f;
 
     private final String name;
     private final int site;

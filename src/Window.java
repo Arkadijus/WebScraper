@@ -1,8 +1,15 @@
 import javax.swing.*;
 import javax.swing.event.TableModelListener;
 import javax.swing.table.TableModel;
+import java.awt.Desktop;
+import java.awt.Point;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 
 public class Window {
     private JPanel panelMain;
@@ -12,32 +19,30 @@ public class Window {
     private JCheckBox amazonCoUkCheckBox;
     private JCheckBox ebayComCheckBox;
     private JTable scrapedDataTable;
-    private JScrollPane scrollPanel;
-    private JButton sortByPriceButton;
 
-    private WebScrapper scrapper = new WebScrapper();
+    private WebScraper scraper = new WebScraper();
 
     Window() {
-        String[] column ={"Name", "Price", "Shipping Price", "Total"};
+        String[] tableHeader ={"Name", "Price", "Shipping Price", "Full price converted"};
         scrapedDataTable.setModel(new TableModel() {
             @Override
             public int getRowCount() {
-                return scrapper.itemList.size();
+                return scraper.getItemList().size();
             }
 
             @Override
             public int getColumnCount() {
-                return column.length;
+                return tableHeader.length;
             }
 
             @Override
             public String getColumnName(int columnIndex) {
-                return column[columnIndex];
+                return tableHeader[columnIndex];
             }
 
             @Override
             public Class<?> getColumnClass(int columnIndex) {
-                return scrapper.itemList.get(0).getClass();
+                return scraper.getItemList().get(0).getClass();
             }
 
             @Override
@@ -49,13 +54,13 @@ public class Window {
             public String getValueAt(int rowIndex, int columnIndex) {
                 switch (columnIndex) {
                     case 0:
-                        return scrapper.itemList.get(rowIndex).getName();
+                        return scraper.getItemList().get(rowIndex).getName();
                     case 1:
-                        return String.valueOf(scrapper.itemList.get(rowIndex).getPrice());
+                        return scraper.getItemList().get(rowIndex).getPrice() + " " + scraper.getItemList().get(rowIndex).getCurrency();
                     case 2:
-                        return String.valueOf(scrapper.itemList.get(rowIndex).getShippingPrice());
+                        return scraper.getItemList().get(rowIndex).getShippingPrice() + " " + scraper.getItemList().get(rowIndex).getCurrency();
                     case 3:
-                        return String.valueOf(scrapper.itemList.get(rowIndex).getFullPrice());
+                        return scraper.getItemList().get(rowIndex).getFullPriceConverted() + " " + "Eur";
                     default:
                         return "0";
                 }
@@ -81,18 +86,32 @@ public class Window {
         scrapedDataTable.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
 
         scrapeButton.addActionListener(new ActionListener() {
-
             @Override
             public void actionPerformed(ActionEvent e) {
                 String searchTerm = searchBar.getText().replace(' ', '+');
-                scrapper.setSearch(searchTerm);
+                scraper.setSearch(searchTerm);
 
-                if (amazonComCheckBox.isSelected()) scrapper.scrapeAmazon_com();
-                if (amazonCoUkCheckBox.isSelected()) scrapper.scrapeAmazon_co_uk();
-                if (ebayComCheckBox.isSelected()) scrapper.scrapeEbay_com();
+                if (amazonComCheckBox.isSelected()) scraper.scrapeAmazon_com();
+                if (amazonCoUkCheckBox.isSelected()) scraper.scrapeAmazon_co_uk();
+                if (ebayComCheckBox.isSelected()) scraper.scrapeEbay_com();
 
-                scrapper.mostRelevantItemSort();
+                scraper.sortByPrice();
                 scrapedDataTable.updateUI();
+            }
+        });
+
+        scrapedDataTable.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                int row = scrapedDataTable.rowAtPoint(new Point(e.getX(), e.getY()));
+
+                if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+                    try {
+                        Desktop.getDesktop().browse(new URI(scraper.getItemList().get(row).getUrl()));
+                    } catch (IOException | URISyntaxException ex) {
+                        ex.printStackTrace();
+                    }
+                }
             }
         });
     }
